@@ -454,6 +454,7 @@ all:
 # Project target defined by PROJECT_NAME
 $(PROJECT_NAME): $(OBJS)
 	$(CC) -o $(PROJECT_BUILD_PATH)/$(PROJECT_NAME)$(EXT) $(OBJS) $(CFLAGS) $(INCLUDE_PATHS) $(LDFLAGS) $(LDLIBS) -D$(PLATFORM)
+	cp -r resources build/resources
 ifeq ($(PLATFORM),PLATFORM_WEB)
 	mv build/$(PROJECT_NAME).html build/index.html
 endif
@@ -521,7 +522,8 @@ endif
 	cd ..
 	find . -type d -name "build" -exec rm -rf {} +
 ifeq ($(PLATFORM_OS),WINDOWS)
-		windres $(PROJECT_NAME).rc -O coff -o $(RAYLIB_PLATFORM_PATH)/$(PROJECT_NAME).rc.data
+	cd ../src
+	windres $(PROJECT_NAME).rc -O coff -o $(RAYLIB_PLATFORM_PATH)/$(PROJECT_NAME).rc.data
 endif
 # 	#Web
 # 	mkdir --parents build
