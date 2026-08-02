@@ -1,0 +1,77 @@
+[
+  //these are very unfinished but its a proof of concept
+  {
+    "label": "Update/Prepare Raylib",
+    "command": "${ZED_WORKTREE_ROOT}/.scripts/updateRaylib.sh",
+    "cwd": "${ZED_WORKTREE_ROOT}"
+  },
+  {
+    "label": "Prepare Desktop",
+    "command": "${ZED_WORKTREE_ROOT}/.scripts/BuildDesktop.sh",
+    "cwd": "${ZED_WORKTREE_ROOT}"
+  },
+  {
+    "label": "Prepare Android",
+    "command": "${ZED_WORKTREE_ROOT}/.scripts/BuildAndroid.sh",
+    "cwd": "${ZED_WORKTREE_ROOT}"
+  },
+  {
+    "label": "Prepare Web",
+    "command": "${ZED_WORKTREE_ROOT}/.scripts/PrepareWeb.sh",
+    "cwd": "${ZED_WORKTREE_ROOT}"
+  },
+  {
+    "label": "Build Web",
+    "command": "make",
+    "cwd": "${ZED_WORKTREE_ROOT}",
+    "args": ["BUILD_MODE=RELEASE", "PLATFORM=PLATFORM_WEB"]
+  },
+  {
+    "label": "Start Web Server",
+    "command": "python -m http.server 8080",
+    "cwd": "${ZED_WORKTREE_ROOT}/build"
+  },
+  {
+    //there's no debugging here
+    "label": "Build Android APK",
+    "command": "${ZED_WORKTREE_ROOT}/.scripts/CompileAPK.sh",
+    "cwd": "${ZED_WORKTREE_ROOT}"
+  },
+  // {
+  //   "label": "Build and Send Android (ADB)",
+  //   "command": "${ZED_WORKTREE_ROOT}/.scripts/MakeADB.sh",
+  //   "cwd": "${ZED_WORKTREE_ROOT}"
+  // },
+  // {
+  //   //lepton tea
+  //   "label": "Build and Launch Android (Waydroid)",
+  //   "command": "${ZED_WORKTREE_ROOT}/.scripts/MakeWaydroid.sh",
+  //   "cwd": "${ZED_WORKTREE_ROOT}"
+  // },
+  // {//other is stuff like old consoles, and other why the hell platformss
+  //   "label": "Prepare Other ",
+  //   "command": "${ZED_WORKTREE_ROOT}/.scripts/BuildOther.sh",
+  //   "cwd": "${ZED_WORKTREE_ROOT}"
+  // },
+  {
+    //the intention is to build all available platforms at once though i might have to wrap it through shell
+    "label": "Build Game (Release)",
+    "command": "make",
+    "cwd": "${ZED_WORKTREE_ROOT}",
+    "args": ["BUILD_MODE=RELEASE"]
+  },
+  {
+    "label": "Build Game (Debug)",
+    "command": "make",
+    "cwd": "${ZED_WORKTREE_ROOT}",
+    "args": ["BUILD_MODE=DEBUG"]
+  },
+  {
+    //the intention is to build all available platforms at once though i might have to wrap it through shell
+    //note PLATFORM=WINDOWS is not technically a valid argument, so it does nothing
+    "label": "Build Game (Windows)",
+    "command": "make",
+    "cwd": "${ZED_WORKTREE_ROOT}",
+    "args": ["BUILD_MODE=RELEASE", "PLATFORM=WINDOWS"]
+  }
+]

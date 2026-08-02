@@ -1,0 +1,531 @@
+#**************************************************************************************************
+# Heavily Modified by BoneManSeth
+# Currently only supports Linux
+#**************************************************************************************************
+#   raylib makefile for Desktop platforms, Raspberry Pi and WebAssembly
+#   Copyright (c) 2021-2024 Ramon Santamaria (@raysan5)
+#
+#   This software is provided "as-is", without any express or implied warranty. In no event
+#   will the authors be held liable for any damages arising from the use of this software.
+#   Permission is granted to anyone to use this software for any purpose, including commercial
+#   applications, and to alter it and redistribute it freely, subject to the following restrictions:
+#
+#     1. The origin of this software must not be misrepresented; you must not claim that you
+#     wrote the original software. If you use this software in a product, an acknowledgment
+#     in the product documentation would be appreciated but is not required.
+#     2. Altered source versions must be plainly marked as such, and must not be misrepresented
+#     as being the original software.
+#     3. This notice may not be removed or altered from any source distribution.
+#**************************************************************************************************
+include .scripts/config.sh #applies config written by BuildDesktop.sh
+.PHONY: all clean
+# Define required environment variables
+#------------------------------------------------------------------------------------------------
+# Define target platform: PLATFORM_DESKTOP, PLATFORM_WEB, PLATFORM_DRM, PLATFORM_ANDROID_BROKEN
+PLATFORM              ?= PLATFORM_DESKTOP
+# NOTE Desktop only: Define the target backend: BACKEND_GLFW, BACKEND_SDL, BACKEND_RGFW
+TARGET_BACKEND       ?= BACKEND_GLFW
+#NOTE Desktop only: currently not used but | 1.1, 2.1, 3.3, 4.3, SOFTWARE
+TARGET_OPENGL_VERSION?= 3.3
+#the name of the folder given by the PLATFORM
+PLATFORM_NAME         ?= desktop
+#this could be simplified
+ifeq ($(PLATFORM),PLATFORM_DESKTOP)
+    PLATFORM_NAME = desktop
+endif
+# i don't entirely understand RPI compiling, so for now its like this
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    PLATFORM_NAME = desktop
+endif
+ifeq ($(PLATFORM),PLATFORM_WEB)
+    PLATFORM_NAME = web
+endif
+ifeq ($(PLATFORM),PLATFORM_ANDROID)
+    PLATFORM_NAME = android
+endif
+
+# Define project variables
+#name of the output executable
+PROJECT_NAME          ?= game
+#not used|to be removed | any idea i have basically results in output game files to the directory of the version number, as in build/1.0/desktop
+PROJECT_VERSION       ?= 1.0
+#the directory from which the build from, usually the src folder, which in this case is the current directory
+PROJECT_BUILD_PATH    ?= build
+#the files used in the project, wildcard checks for all files that use .c, note that it doesn't check subdirectories
+# PROJECT_SOURCE_FILES  ?= $(wildcard *.c)
+#check for all files in the src directory
+PROJECT_SOURCE_FILES ?= $(shell find src -type f -name '*.c')
+
+PROJECT_INCLUDE_FLAGS_FILE ?= compile_flags.txt
+
+
+# Define paths libraries, the source directory, and the includes
+#the path from where to get the the platform libaries from
+RAYLIB_PLATFORM_PATH  ?= platform
+RAYLIB_INCLUDE_PATH   ?= $(shell find $(RAYLIB_PLATFORM_PATH)/$(PLATFORM_NAME)/include -type d)
+RAYLIB_LIB_PATH       ?= $(shell find $(RAYLIB_PLATFORM_PATH)/$(PLATFORM_NAME)/lib -type d)
+
+# Library type used for raylib: STATIC (.a) or SHARED (.so/.dll)
+# i don't understand this thing's use, because as it currently stands it does nothing, but it does check if shared for libc, yet it still works on static so its doing something wrong
+#really what i think this should to is decide if it should get raylib from usr/lib or from the local platforms directory
+RAYLIB_LIBTYPE        ?= STATIC
+
+# Define compiler path on Windows, you will need to modify it if you changed where raylib is installed
+COMPILER_PATH         ?= C:\raylib\w64devkit\bin
+
+# Build mode for project: DEBUG or RELEASE
+# as far as i am aware, the difference is only in the amount of symbols in the output,
+# which might be useful when debugging a compiled application, to check for post compilation bugs, or if you want modders to have an easier time modding the game
+BUILD_MODE            ?= DEBUG
+
+# PLATFORM_WEB: Default properties
+#i'll be honest with you, i have no idea with most of these do
+BUILD_WEB_ASYNCIFY    ?= FALSE
+#this needs to be routed into the raylib src
+BUILD_WEB_SHELL       ?= raylib/src/minshell.html
+BUILD_WEB_HEAP_SIZE   ?= 128MB
+BUILD_WEB_STACK_SIZE  ?= 1MB
+BUILD_WEB_ASYNCIFY_STACK_SIZE ?= 1048576
+BUILD_WEB_RESOURCES   ?= FALSE
+BUILD_WEB_RESOURCES_PATH  ?= resources
+#you don't really have a reason to not use the git version unless the git version is unusably broken from a bad commit
+EMSCRIPTEN_USE_GIT       ?= FALSE
+EMSCRIPTEN_GIT_PATH      ?= $(RAYLIB_PLATFORM_PATH)/external/emscripten
+
+# PLATFORM_ANDROID: Default properties
+# probably meant for windows too
+# BUILD_TOOLS ?= .
+# TOOLCHAIN ?= .
+# NATIVE_APP_GLUE ?= .
+
+#the following have not been extensively tested:
+#GLFW PATHS
+#in case you want to use either the package manager's GLFW, custom source code, or use the embedded one
+#TRUE, FALSE, CUSTOM
+GLFW_USE_EXTERNAL     ?= FALSE
+#and if you want to bring your own
+GLFW_INCLUDE_PATH      ?= $(RAYLIB_PLATFORM_PATH)/external/GLFW/include
+GLFW_LIBRARY_PATH      ?= $(RAYLIB_PLATFORM_PATH)/external/GLFW/lib
+# Enable support for X11 by default on Linux when using GLFW
+# NOTE: Wayland is disabled by default, probably for stability
+GLFW_LINUX_ENABLE_WAYLAND  ?= FALSE
+GLFW_LINUX_ENABLE_X11      ?= TRUE
+#SDL PATHS
+#Untested
+#SDL does not come pre embedded into raylib and needs manual installation
+#by default, if you have SDL2 installed through your package manager, it'll work just fine
+#if you want to manually include SDL2, you'd have to compile it and place it in platform/external
+SDL_INCLUDE_PATH      ?= $(RAYLIB_PLATFORM_PATH)/external/SDL2/include
+SDL_LIBRARY_PATH      ?= $(RAYLIB_PLATFORM_PATH)/external/SDL2/lib
+SDL_LIBRARIES         ?= -lSDL2 -lSDL2main
+#RGFW PATHS
+#RGFW is basically a header file on steroids
+RGFW_INCLUDE_PATH      ?= $(RAYLIB_PLATFORM_PATH)/external/RGFW/include
+#there is a librgfw.a but i don't know what's in it
+RGFW_LIBRARIES         ?= -lRGFW
+
+
+# Determine PLATFORM_OS in case PLATFORM_DESKTOP selected
+ifeq ($(PLATFORM),PLATFORM_DESKTOP)
+    # No uname.exe on MinGW!, but OS=Windows_NT on Windows!
+    # ifeq ($(UNAME),Msys) -> Windows
+    ifeq ($(OS),Windows_NT)
+        PLATFORM_OS = WINDOWS
+        export PATH := $(COMPILER_PATH):$(PATH)
+    else
+        UNAMEOS = $(shell uname)
+        ifeq ($(UNAMEOS),Linux)
+            PLATFORM_OS = LINUX
+        endif
+        #need to check if this even works, i don't have a bsd VM on hand right now
+        ifneq ($(filter $(UNAMEOS),FreeBSD OpenBSD NetBSD DragonFly),)
+            PLATFORM_OS = BSD
+        endif
+        ifeq ($(UNAMEOS),Darwin)
+            PLATFORM_OS = OSX
+        endif
+    endif
+endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    UNAMEOS = $(shell uname)
+    ifeq ($(UNAMEOS),Linux)
+        PLATFORM_OS = LINUX
+    endif
+endif
+# $(info $(PLATFORM_NAME)) #can be used to check if you aren't sure what platform its taking the libs from
+
+# ifeq ($(PLATFORM),PLATFORM_WEB)
+#     # Emscripten required variables
+#     # only for windows, untested
+#     # causes problems when compiling on windows
+#     EMSDK_PATH         ?= C:/emsdk
+#     EMSCRIPTEN_PATH    ?= $(EMSDK_PATH)/upstream/emscripten
+#     CLANG_PATH          = $(EMSDK_PATH)/upstream/bin
+#     PYTHON_PATH         = $(EMSDK_PATH)/python/3.9.2-1_64bit
+#     NODE_PATH           = $(EMSDK_PATH)/node/14.18.2_64bit/bin
+#     export PATH         = $(EMSDK_PATH);$(EMSCRIPTEN_PATH);$(CLANG_PATH);$(NODE_PATH);$(PYTHON_PATH):$$(PATH)
+# endif
+
+
+# Define default C compiler: CC
+#------------------------------------------------------------------------------------------------
+CC = gcc
+
+ifeq ($(PLATFORM),PLATFORM_DESKTOP)
+    ifeq ($(PLATFORM_OS),OSX)
+        # OSX default compiler
+        CC = clang
+    endif
+    ifeq ($(PLATFORM_OS),BSD)
+        # FreeBSD, OpenBSD, NetBSD, DragonFly default compiler
+        CC = clang
+    endif
+endif
+ifeq ($(PLATFORM),PLATFORM_WEB)
+    # HTML5 emscripten compiler
+    # WARNING: To compile to HTML5, code must be redesigned
+    # to use emscripten.h and emscripten_set_main_loop()
+    ifeq ($(EMSCRIPTEN_USE_GIT), TRUE)
+	CC = $(EMSCRIPTEN_GIT_PATH)/emcc
+    else
+    #it does get exposed to linux with the package, but only after a computer restart because it relies on a profile.d setup file
+	CC = emcc
+    endif
+endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    ifeq ($(USE_RPI_CROSS_COMPILER),TRUE)
+        # Define RPI cross-compiler
+        #CC = armv6j-hardfloat-linux-gnueabi-gcc
+        CC = $(RPI_TOOLCHAIN)/bin/arm-linux-gnueabihf-gcc
+    endif
+endif
+
+
+# Define default make program: MAKE
+#------------------------------------------------------------------------------------------------
+MAKE ?= make
+
+ifeq ($(PLATFORM),PLATFORM_DESKTOP)
+    ifeq ($(PLATFORM_OS),WINDOWS)
+        MAKE = mingw32-make
+    endif
+endif
+
+# Define compiler flags: CFLAGS
+#------------------------------------------------------------------------------------------------
+#  -O1                  defines optimization level
+#  -g                   include debug information on compilation
+#  -s                   strip unnecessary data from build
+#  -Wall                turns on most, but not all, compiler warnings
+#  -std=c99             defines C language mode (standard C from 1999 revision)
+#  -std=gnu99           defines C language mode (GNU C from 1999 revision)
+#  -Wno-missing-braces  ignore invalid warning (GCC bug 53119)
+#  -Wno-unused-value    ignore unused return values of some functions (i.e. fread())
+#  -D_DEFAULT_SOURCE    use with -std=c99 on Linux and PLATFORM_WEB, required for timespec
+CFLAGS = -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces -Wno-unused-value -Wno-pointer-sign $(PROJECT_CUSTOM_FLAGS)
+#CFLAGS += -Wextra -Wmissing-prototypes -Wstrict-prototypes
+
+#if not debug don't add web flags?, i don't get it, nor do i care about testing it right now, because it does still work
+ifeq ($(BUILD_MODE),DEBUG)
+    CFLAGS += -g -D_DEBUG
+else
+    ifeq ($(PLATFORM),PLATFORM_WEB)
+        ifeq ($(BUILD_WEB_ASYNCIFY),TRUE)
+            CFLAGS += -O3
+        else
+            CFLAGS += -Os
+        endif
+    else
+        ifeq ($(PLATFORM_OS),OSX)
+            CFLAGS += -O2
+        else
+            CFLAGS += -s -O2
+        endif
+    endif
+endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    CFLAGS += -std=gnu99 -DEGL_NO_X11
+endif
+#i don't know what half of these are
+ifeq ($(PLATFORM),PLATFORM_ANDROID)
+	CFLAGS += -ffunction-sections -funwind-tables -fstack-protector-strong -fPIC -Wall \
+	-Wformat -Werror=format-security -no-canonical-prefixes \
+	-DANDROID -DPLATFORM_ANDROID -D__ANDROID_API__=29
+endif
+
+# Define include paths for required headers: INCLUDE_PATHS
+#------------------------------------------------------------------------------------------------
+# NOTE: Several external required libraries (stb and others)
+INCLUDE_PATHS += -I. -I$(RAYLIB_INCLUDE_PATH) -I./src
+# NOTE: this is only for external libraries, as it will check for usr/include first
+
+# Define additional directories containing required header files
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    # DRM required libraries
+    INCLUDE_PATHS += -I/usr/include/libdrm
+endif
+ifeq ($(PLATFORM),PLATFORM_DESKTOP)
+    ifeq ($(TARGET_BACKEND),BACKEND_GLFW)
+	ifeq ($(GLFW_USE_EXTERNAL), CUSTOM)
+		INCLUDE_PATHS += -I$(GLFW_INCLUDE_PATH)
+	endif
+    endif
+    ifeq ($(TARGET_BACKEND),BACKEND_SDL)
+		INCLUDE_PATHS += -I$(SDL_INCLUDE_PATH)
+    endif
+    ifeq ($(TARGET_BACKEND),BACKEND_RGFW)
+		INCLUDE_PATHS += -I$(RGFW_INCLUDE_PATH)
+    endif
+
+endif
+ifeq ($(PLATFORM_OS),BSD)
+        # it probably needs way more than just this, compare this section to one in raylib itselrf
+	INCLUDE_PATHS += -I/usr/local/include
+endif
+
+
+# Define library paths containing required libs: LDFLAGS
+#------------------------------------------------------------------------------------------------
+LDFLAGS = -L. -L$(RAYLIB_LIB_PATH)
+
+ifeq ($(PLATFORM),PLATFORM_DESKTOP)
+    ifeq ($(PLATFORM_OS),WINDOWS)
+        # NOTE: The resource .rc file contains windows executable icon and properties
+        LDFLAGS += $(PROJECT_NAME).rc.data
+        # -Wl,--subsystem,windows hides the console window
+        ifeq ($(BUILD_MODE), RELEASE)
+            LDFLAGS += -Wl,--subsystem,windows
+        endif
+    endif
+    ifeq ($(PLATFORM_OS),BSD)
+        # Consider -L$(RAYLIB_INSTALL_PATH)
+        LDFLAGS += -Lsrc -L/usr/local/lib
+    endif
+    ifeq ($(PLATFORM_OS),LINUX)
+        # Reset everything.
+        # Precedence: immediately local, installed version, raysan5 provided libs
+        #LDFLAGS += -L$(RAYLIB_RELEASE_PATH)
+    endif
+endif
+ifeq ($(PLATFORM),PLATFORM_WEB)
+    # -Os                        # size optimization
+    # -O2                        # optimization level 2, if used, also set --memory-init-file 0
+    # -s USE_GLFW=3              # Use glfw3 library (context/input management)
+    # -s ALLOW_MEMORY_GROWTH=1   # to allow memory resizing -> WARNING: Audio buffers could FAIL!
+    # -s TOTAL_MEMORY=16777216   # to specify heap memory size (default = 16MB) (67108864 = 64MB)
+    # -s USE_PTHREADS=1          # multithreading support
+    # -s WASM=0                  # disable Web Assembly, emitted by default
+    # -s ASYNCIFY                # lets synchronous C/C++ code interact with asynchronous JS
+    # -s FORCE_FILESYSTEM=1      # force filesystem to load/save files data
+    # -s ASSERTIONS=1            # enable runtime checks for common memory allocation errors (-O1 and above turn it off)
+    # --profiling                # include information for code profiling
+    # --memory-init-file 0       # to avoid an external memory initialization code file (.mem)
+    # --preload-file resources   # specify a resources folder for data compilation
+    # --source-map-base          # allow debugging in browser with source map
+    LDFLAGS += -s USE_GLFW=3 -s TOTAL_MEMORY=$(BUILD_WEB_HEAP_SIZE) -s STACK_SIZE=$(BUILD_WEB_STACK_SIZE) -s FORCE_FILESYSTEM=1
+
+    # Build using asyncify
+    ifeq ($(BUILD_WEB_ASYNCIFY),TRUE)
+        LDFLAGS += -s ASYNCIFY -s ASYNCIFY_STACK_SIZE=$(BUILD_WEB_ASYNCIFY_STACK_SIZE)
+    endif
+
+    # Add resources building if required
+    ifeq ($(BUILD_WEB_RESOURCES),TRUE)
+        LDFLAGS += --preload-file $(BUILD_WEB_RESOURCES_PATH)
+    endif
+
+    # Add debug mode flags if required
+    ifeq ($(BUILD_MODE),DEBUG)
+        LDFLAGS += -s ASSERTIONS=1 --profiling
+    endif
+
+    # Define a custom shell .html and output extension
+    LDFLAGS += --shell-file $(BUILD_WEB_SHELL)
+    EXT = .html
+endif
+
+# Define libraries required on linking: LDLIBS
+# NOTE: To link libraries (lib<name>.so or lib<name>.a), use -l<name>
+#------------------------------------------------------------------------------------------------
+ifeq ($(PLATFORM),PLATFORM_DESKTOP)
+    ifeq ($(RAYLIB_LIBTYPE),SHARED)
+	LDLIBS += -lraylib
+    else
+	LDLIBS += $(shell find $(RAYLIB_PLATFORM_PATH)/$(PLATFORM_NAME)/lib -type f -name '*.a')
+    endif
+    #OS Library Assignment
+    ifeq ($(PLATFORM_OS),WINDOWS)
+        # Libraries for Windows desktop compilation
+        # NOTE: WinMM library required to set high-res timer resolution
+        LDLIBS += -lopengl32 -lgdi32 -lwinmm -lcomdlg32 -lole32
+        # Required for physac examples
+        LDLIBS += -static -lpthread
+    endif
+    ifeq ($(PLATFORM_OS),LINUX)
+	#manual assignment of libraylib
+#         Libraries for Debian GNU/Linux desktop compiling
+#         NOTE: Required packages: libegl1-mesa-dev
+        LDLIBS += -lGL -lm -lpthread -ldl -lrt
+
+        # On Wayland windowing system, additional libraries requires
+        ifeq ($(USE_WAYLAND_DISPLAY),TRUE)
+            LDLIBS += -lwayland-client -lwayland-cursor -lwayland-egl -lxkbcommon
+        else
+            # On X11 requires also below libraries
+            LDLIBS += -lX11
+            # NOTE: It seems additional libraries are not required any more, latest GLFW just dlopen them
+            #LDLIBS += -lXrandr -lXinerama -lXi -lXxf86vm -lXcursor
+        endif
+        # Explicit link to libc
+        ifeq ($(RAYLIB_LIBTYPE),SHARED)
+            LDLIBS += -lc
+        endif
+    endif
+    ifeq ($(PLATFORM_OS),OSX)
+        # Libraries for OSX 10.9 desktop compiling
+        # NOTE: Required packages: libopenal-dev libegl1-mesa-dev
+        LDLIBS += -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo
+    endif
+    ifeq ($(PLATFORM_OS),BSD)
+        # Libraries for FreeBSD, OpenBSD, NetBSD, DragonFly desktop compiling
+        # NOTE: Required packages: mesa-libs
+        LDLIBS += -lGL -lpthread -lm
+
+        # On XWindow requires also below libraries
+        LDLIBS += -lX11 -lXrandr -lXinerama -lXi -lXxf86vm -lXcursor
+    endif
+    #BACKEND ASSIGNMENT
+    ifeq ($(TARGET_BACKEND),BACKEND_GLFW)
+	ifeq ($(GLFW_USE_EXTERNAL), CUSTOM)
+		LDLIBS += $(shell find $(GLFW_LIBRARY_PATH) -type f -name '*.a')
+	endif
+	ifeq ($(GLFW_USE_EXTERNAL), TRUE)
+		LDLIBS += -lglfw
+	endif
+	#otherwise get the embedded one
+    endif
+    ifeq ($(TARGET_BACKEND),BACKEND_SDL)
+	LDLIBS += -lSDL3
+    endif
+#RGFW is not a library, its a giant header file
+    ifeq ($(TARGET_BACKEND),BACKEND_RGFW)
+# 		interesting, so RGFW requires -lX11 and -lXrandr
+		LDLIBS += -lX11 -lXrandr
+		#it can technically take more, but it also doesn't use most of them, i'm down to being wrong though
+# 		LDLIBS = -lGL -lX11 -lXrandr -lXinerama -lXi -lXcursor -lm -lpthread -ldl -lrt
+    endif
+endif
+
+ifeq ($(PLATFORM),PLATFORM_WEB)
+    # Libraries for web (HTML5) compiling
+    # now the compilation for desktop errors because it tries to compile this lib for the wrong platform
+    # the solution for which goes 2 ways:
+    # get libraries on compile through wgetting them, basically having it run slightly beforehand
+    # or
+    # install the libs to some sort of directory like the fucking emsdk i was supposed to be using, seriously what's the point of the emscripten package?
+    LDLIBS += $(shell find $(RAYLIB_PLATFORM_PATH)/$(PLATFORM_NAME)/lib -type f -name '*.a')
+endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    # Libraries for DRM compiling
+    # NOTE: Required packages: libasound2-dev (ALSA)
+    LDLIBS += -lraylib -lGLESv2 -lEGL -lpthread -lrt -lm -lgbm -ldrm -ldl
+endif
+
+
+# Define all object files from source files
+#------------------------------------------------------------------------------------------------
+OBJS = $(patsubst %.c, %.o, $(PROJECT_SOURCE_FILES))
+
+# Define processes to execute
+#------------------------------------------------------------------------------------------------
+# Default target entry
+all:
+#create the build directory, cause i just realized the folder gets deleted on commit
+	find src -type f -name *.o -delete
+	find build -type f -executable -delete
+	find build -type f -name $(PROJECT_NAME).o -delete
+	find build -type f -name $(PROJECT_NAME).html -delete
+	find build -type f -name $(PROJECT_NAME).js -delete
+	find build -type f -name $(PROJECT_NAME).wasm -delete
+	mkdir -p build
+	$(shell printf '%s\n' $(INCLUDE_PATHS) > $(PROJECT_INCLUDE_FLAGS_FILE)) #printf is weird, its like echo but on crack
+	$(MAKE) $(PROJECT_NAME)
+
+# Project target defined by PROJECT_NAME
+$(PROJECT_NAME): $(OBJS)
+	$(CC) -o $(PROJECT_BUILD_PATH)/$(PROJECT_NAME)$(EXT) $(OBJS) $(CFLAGS) $(INCLUDE_PATHS) $(LDFLAGS) $(LDLIBS) -D$(PLATFORM)
+ifeq ($(PLATFORM),PLATFORM_WEB)
+	mv build/$(PROJECT_NAME).html build/index.html
+endif
+
+# Compile source files
+# NOTE: This pattern will compile every module defined on $(OBJS)
+%.o: %.c
+	$(CC) -c $< -o $@ $(CFLAGS) $(INCLUDE_PATHS) -D$(PLATFORM)
+
+# Clean everything
+clean:
+#make it OS centric instead of platform centric because there's really no point in doing otherwise
+ifeq ($(PLATFORM_OS),WINDOWS)
+		del *.o *.exe /s
+endif
+ifeq ($(PLATFORM_OS),LINUX)
+	#reminder to figure out why .o goes to src and not build
+	find src -type f -name *.o -delete
+	find build -type f -executable -delete
+	find build -type f -name $(PROJECT_NAME).o -delete
+	find build -type f -name $(PROJECT_NAME).html -delete
+	find build -type f -name $(PROJECT_NAME).js -delete
+	find build -type f -name $(PROJECT_NAME).wasm -delete
+endif
+ifeq ($(PLATFORM_OS),OSX)
+	rm -f *.o external/*.o $(PROJECT_NAME)
+endif
+#with the exception of this
+ifeq ($(PLATFORM),PLATFORM_DRM)
+	find . -type f -executable -delete
+	rm -fv *.o
+endif
+# just noticed the lack of a BSD check
+ifeq ($(PLATFORM),PLATFORM_WEB)
+	#find . -type f -executable -delete
+	find src -type f -name *.o -delete
+	find build -type f -executable -delete
+	find build -type f -name $(PROJECT_NAME).o -delete
+	find build -type f -name $(PROJECT_NAME).html -delete
+	find build -type f -name $(PROJECT_NAME).js -delete
+	find build -type f -name $(PROJECT_NAME).wasm -delete
+	#rm -fv $(PROJECT_NAME).o $(PROJECT_NAME).html $(PROJECT_NAME).js $(PROJECT_NAME).wasm
+endif
+
+# ifeq ($(PLATFORM),PLATFORM_DESKTOP)
+#     ifeq ($(PLATFORM_OS),WINDOWS)
+# 		del *.o *.exe /s
+#     endif
+#     ifeq ($(PLATFORM_OS),LINUX)
+# 		find src -type f -name *.o -delete
+# 		find build -type f -executable -delete
+# 		find build -type f -name $(PROJECT_NAME).o -delete
+# 		find build -type f -name $(PROJECT_NAME).html -delete
+# 		find build -type f -name $(PROJECT_NAME).js -delete
+# 		find build -type f -name $(PROJECT_NAME).wasm -delete
+#     endif
+#     ifeq ($(PLATFORM_OS),OSX)
+# 		rm -f *.o external/*.o $(PROJECT_NAME)
+#     endif
+# endif
+# ifeq ($(PLATFORM),PLATFORM_DRM)
+# 	find . -type f -executable -delete
+# 	rm -fv *.o
+# endif
+# ifeq ($(PLATFORM),PLATFORM_WEB)
+# # 	del *.o *.html *.js #this doesn't check compile platform right now
+# 	#find . -type f -executable -delete
+# 	find build -type f -name $(PROJECT_NAME).o -delete
+# 	find build -type f -name $(PROJECT_NAME).html -delete
+# 	find build -type f -name $(PROJECT_NAME).js -delete
+# 	find build -type f -name $(PROJECT_NAME).wasm -delete
+# 	#rm -fv $(PROJECT_NAME).o $(PROJECT_NAME).html $(PROJECT_NAME).js $(PROJECT_NAME).wasm
+#
+# endif
+	@echo Cleaning done

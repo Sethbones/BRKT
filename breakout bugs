@@ -1,0 +1,47 @@
+breakout bugs:
+for some reason its using ball collision instead of a small square
+the collision is technically correct but that's the problem, it causes random feeling collisions, this is due to circle collision existing
+to add to to this, if a ball is moving at a flat direction (i.e straight up), then collision is basically just ignore because the circle collider hits, but it doesn't do anything because while its closer to the side, it isn't moving to the side, so it ends up flipping 0 by -1 which results in 0
+
+Edit: it has been done | the collision itself is not abstracted into its own function and is messy as hell
+
+the brick type doesn't have any specific rulings like double collisions
+
+
+going over points:
+1:
+a. the paddle is at the bottom of the screen
+b. it only moves on left and right, which is fine really
+c. there's no vertical movement thankfully
+
+2:
+a. its using constant movements
+b. basic break out rules
+c. direction pushing is implemented even if it is janky as fuck
+
+3:
+a. well yeah, that's basic
+b. been handled and now there's proper ways to do level design| TODO: only one type of brick currently, its way more complicated than just "oh just add another layer", which is probably what i would end up doing, i could potentially try to abstract this to load a layout from file
+
+4:
+well one now exists except its hidden behind the actual level
+so it should probably be  moved to either bottom left or bottom right
+a. so a basic point system?, sure why not
+b. a point system visualizer
+
+5:
+this is already implemented
+
+6:
+TODO: code's a mess
+
+7(Optionals):
+how about you just make DX-Ball?
+    a. add power ups, and power up blocks - this would require completely reengineering the way the paddle is drawn to be dynamically drawn from chunks, pretty easy to do, just draw the sides with an offset and the middle pieces are just one long tile stretched out
+    first, power up blocks themselves
+
+
+b. multiple stages
+c. pause feature (that's clever honestly, since that's a good test for game development) - already implemented
+d. sound effects
+e. fuck it we ball features

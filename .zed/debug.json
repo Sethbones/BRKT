@@ -1,0 +1,45 @@
+// For more documentation on how to configure debug tasks,
+// see: https://zed.dev/docs/debugger
+[
+  {
+    "label": "Build and Debug Desktop",
+    "adapter": "CodeLLDB",
+    "program": "${ZED_WORKTREE_ROOT}/build/game",
+    "request": "launch",
+    "build": {
+      "command": "make",
+      "cwd": "${ZED_WORKTREE_ROOT}",
+      "args": ["BUILD_MODE=DEBUG", "PLATFORM=PLATFORM_DESKTOP"]
+    }
+  },
+  //scrapped until i understand the limitations of debugging
+  // {
+  //   "label": "Build and Run Android",
+  //   "adapter": "CodeLLDB",
+  //   "program": "${ZED_WORKTREE_ROOT}/build/game",
+  //   "request": "launch",
+  //   "build": {
+  //     "command": "make",
+  //     "cwd": "${ZED_WORKTREE_ROOT}",
+  //     "args": ["BUILD_MODE=DEBUG", "PLATFORM=PLATFORM_ANDROID"]
+  //   }
+  // },
+  {
+    //okay so Zed doesn't have anything for web server automation, nice
+    //basically can't do make and start a webserver one after another, you have to choose
+    //i can turn off restrictions and force it to run, but that's not a good idea at all
+    //so i'm left with either turning off restrictions, or use a seperate web server task
+    //chances are i could probably do something stupid but that's not for now, if someone wants to chime in go ahead
+    "label": "Build and Debug Web (ensure: 'Start Web Server' is running before compile)",
+    "adapter": "JavaScript",
+    "type": "chrome",
+    "url": "http://localhost:8080/game.html",
+    "request": "launch",
+    "webRoot": "${ZED_WORKTREE_ROOT}/build",
+    "build": {
+      "command": "make",
+      "cwd": "${ZED_WORKTREE_ROOT}",
+      "args": ["BUILD_MODE=DEBUG", "PLATFORM=PLATFORM_WEB"]
+    }
+  }
+]
