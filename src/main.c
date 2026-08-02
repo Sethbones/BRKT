@@ -3,7 +3,6 @@
 *   from: https://github.com/raysan5/raylib-intro-course
 ********************************************************************************************/
 #include "raylib.h"
-#include "raylib/src/raylib.h"
 #include "raymath.h"
 #include <math.h>
 #include <string.h>

@@ -498,6 +498,19 @@ ifeq ($(PLATFORM),PLATFORM_WEB)
 	#rm -fv $(PROJECT_NAME).o $(PROJECT_NAME).html $(PROJECT_NAME).js $(PROJECT_NAME).wasm
 endif
 
+.ONESHELL:
+prep:
+	git clone --branch 6.0 --depth 1 https://github.com/raysan5/raylib.git
+	cd raylib
+	mkdir --parents build
+	cd build
+	cmake -DBUILD_SHARED_LIBS=OFF -DPLATFORM=Desktop -DBUILD_EXAMPLES=OFF ..
+	make
+	mkdir --parents ../../platform/desktop/lib
+	mv raylib/libraylib.a ../../platform/desktop/lib
+	mkdir --parents ../../platform/desktop/include
+	mv raylib/include/* ../../platform/desktop/include
+
 # ifeq ($(PLATFORM),PLATFORM_DESKTOP)
 #     ifeq ($(PLATFORM_OS),WINDOWS)
 # 		del *.o *.exe /s

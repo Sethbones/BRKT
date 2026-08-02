@@ -1,6 +1,6 @@
 //this has the includes of all files in one consolidated spot
 #include "powerup.h"
-#include "raylib/src/raylib.h"
+#include "raylib.h"
 #include <string.h>
 
 //great macro function

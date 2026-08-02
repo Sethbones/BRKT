@@ -2,7 +2,7 @@
 #include "raylib.h"
 #include <string.h>
 #include "data.h"
-#include "raylib/src/raylib.h"
+#include "raylib.h"
 
 //a basic timeout thingamajig
 static void pwr_UpgradeTimeout(Player *instance, float *duration, unsigned int arrIndex){

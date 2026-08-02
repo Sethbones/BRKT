@@ -1,5 +1,4 @@
 #include "raylib.h"
-#include "raylib/src/raylib.h"
 #include <stddef.h> //all of this just for
                     // #define NULL ((void *)0)
 //so variables can also be literally defined like this?
